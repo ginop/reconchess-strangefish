@@ -1,0 +1,1 @@
+from .strangefish import StrangeFish
