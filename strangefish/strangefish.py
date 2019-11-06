@@ -57,7 +57,11 @@ class StrangeFish(Player):
         :param choose_move: A callable produced by the strategy function which chooses and returns the move
         :param while_we_wait: An optional callable produced by the strategy function which uses time between our turns
         :param end_game: An optional callable produced by the strategy function which (typically) shuts down StockFish
+
+        :param pool_size: Number of processes to use when multiprocessing board set expansion and filtering
+        :param log_to_file: A boolean flag to turn on/off logging to file gameLogs/StrangeFish.log
         :param save_debug_history: A boolean flag to turn on/off the generation of a turn-by-turn internal history
+        :param rc_disable_pbar: A boolean flag to turn on/off the tqdm progress bars
         """
 
         self._choose_sense = choose_sense
