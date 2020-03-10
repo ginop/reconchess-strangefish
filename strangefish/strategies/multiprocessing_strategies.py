@@ -44,6 +44,41 @@ class TimeConfig:
 chess.Board.__hash__ = lambda self: hash(self.epd(en_passant='xfen'))
 
 
+# Create a cache key for the requested board and move (keyed based on the move that would result from that request)
+def make_cache_key(board: chess.Board, move: chess.Move = chess.Move.null(), prev_turn_score: int = None):
+    move = simulate_move(board, move) or chess.Move.null()
+    return (board.epd(en_passant="xfen") + ' ' + move.uci() + ' ' +
+            (str(prev_turn_score) if prev_turn_score is not None else '-'))
+
+
+# Each "worker" runs a StockFish engine and waits for requested scores
+def worker(request_queue, response_queue, score_config, num_threads):
+    logger = create_sub_logger('stockfish_queue_worker')
+    engine = stockfish.create_engine()
+    if num_threads:
+        engine.configure({'Threads': num_threads})
+    while True:
+        if not request_queue.empty():
+            board, move, prev_turn_score = request_queue.get()
+            try:
+                score = calculate_score(board=board, move=move, prev_turn_score=prev_turn_score or 0,
+                                        engine=engine, score_config=score_config)
+            except chess.engine.EngineTerminatedError:
+                logger.error('Stockfish engine died while analysing (%s).',
+                             make_cache_key(board, move, prev_turn_score))
+                # If the analysis crashes the engine, something went really wrong. This tends to happen when the
+                #  board is not valid, but that is meant to be filtered in calculate_score. Just in case, do not
+                #  re-query the engine, instead assign the move a conservative score (here: as though into check).
+                response_queue.put({make_cache_key(board, move, prev_turn_score): score_config.into_check_score})
+                engine = stockfish.create_engine()
+                if num_threads:
+                    engine.configure({'Threads': num_threads})
+            else:
+                response_queue.put({make_cache_key(board, move, prev_turn_score): score})
+        else:
+            sleep(0.001)
+
+
 def create_strategy(
         move_config: MoveConfig = MoveConfig(),
         score_config: ScoreConfig = ScoreConfig(),
@@ -133,12 +168,6 @@ def create_strategy(
     request_queue = mp.Queue()
     response_queue = mp.Queue()
 
-    # Create a cache key for the requested board and move (keyed based on the move that would result from that request)
-    def make_cache_key(board: chess.Board, move: chess.Move = chess.Move.null(), prev_turn_score: int = None):
-        move = simulate_move(board, move) or chess.Move.null()
-        return (board.epd(en_passant="xfen") + ' ' + move.uci() + ' ' +
-                (str(prev_turn_score) if prev_turn_score is not None else '-'))
-
     # Memoized calculation of the score associated with one move on one board
     def memo_calc_score(board: chess.Board, move: chess.Move = chess.Move.null(), prev_turn_score: int = None):
         key = make_cache_key(board, move, prev_turn_score)
@@ -172,32 +201,6 @@ def create_strategy(
 
         return results
 
-    # Each "worker" runs a StockFish engine and waits for requested scores
-    def worker():
-        engine = stockfish.create_engine()
-        if num_threads:
-            engine.configure({'Threads': num_threads})
-        while True:
-            if not request_queue.empty():
-                board, move, prev_turn_score = request_queue.get()
-                try:
-                    score = calculate_score(board=board, move=move, prev_turn_score=prev_turn_score or 0,
-                                            engine=engine, score_config=score_config)
-                except chess.engine.EngineTerminatedError:
-                    logger.error('Stockfish engine died while analysing (%s).',
-                                 make_cache_key(board, move, prev_turn_score))
-                    # If the analysis crashes the engine, something went really wrong. This tends to happen when the
-                    #  board is not valid, but that is meant to be filtered in calculate_score. Just in case, do not
-                    #  re-query the engine, instead assign the move a conservative score (here: as though into check).
-                    response_queue.put({make_cache_key(board, move, prev_turn_score): score_config.into_check_score})
-                    engine = stockfish.create_engine()
-                    if num_threads:
-                        engine.configure({'Threads': num_threads})
-                else:
-                    response_queue.put({make_cache_key(board, move, prev_turn_score): score})
-            else:
-                sleep(0.001)
-
     # Add a new board to the cache (evaluate the board's strength and relative score for every possible move).
     def cache_board(board: chess.Board):
         board.turn = not board.turn
@@ -218,7 +221,7 @@ def create_strategy(
         return random.choice(tuple(uncached_boards)) if uncached_boards else None
 
     # Create and start the requested number of StockFish "worker" processes
-    workers = [mp.Process(target=worker) for _ in range(num_workers)]
+    workers = [mp.Process(target=worker, args=(request_queue, response_queue, score_config, num_threads)) for _ in range(num_workers)]
     for process in workers:
         process.start()
 
