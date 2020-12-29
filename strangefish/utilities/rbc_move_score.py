@@ -45,7 +45,7 @@ def calculate_score(engine: chess.engine.SimpleEngine,
         return score_config.into_check_score
 
     engine_result = engine.analyse(next_board, chess.engine.Limit(depth=score_config.search_depth))
-    score = engine_result.score.pov(pov).score(mate_score=score_config.checkmate_score)
+    score = engine_result['score'].pov(pov).score(mate_score=score_config.checkmate_score)
 
     # Add bonus board position score if king is attacked
     king_attackers = next_board.attackers(pov, next_board.king(not pov))  # list of pieces that can reach the enemy king
