@@ -85,7 +85,3 @@ Ex: `python strangefish/utilities/modified_rc_connect.py [your username] [your p
 Yes, this NeurIPS competitor is lacking any neural systems. Neural sub-systems were attempted
 over the pre-tournament development, but none out-performed the bot as it is here. Hopefully,
 then, StrangeFish can provide a useful competitor against which neural alternatives can be developed.
-
-The multiprocessing used in the tournament-submitted version of StrangeFish is incompatible with Windows.
-That can (and will, eventually) be fixed, but the goal here is to present the bot as it was during the
-tournament.
