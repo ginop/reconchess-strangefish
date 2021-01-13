@@ -1,4 +1,6 @@
 import multiprocessing
+import signal
+import sys
 import time
 import traceback
 import yaml
@@ -7,11 +9,12 @@ import requests
 
 import chess
 from reconchess import Player, RemoteGame, play_turn, ChessJSONDecoder
-from reconchess.scripts.rc_connect import RBCServer
+from reconchess.scripts.rc_connect import RBCServer, ranked_mode, unranked_mode, check_package_version
 
 from strangefish import StrangeFish
 from strangefish.strategies import multiprocessing_strategies
 from strangefish.strategies.multiprocessing_strategies import MoveConfig, TimeConfig, ScoreConfig
+from strangefish.utilities import ignore_one_term
 from strangefish.utilities.player_logging import create_main_logger, create_sub_logger
 
 
@@ -69,7 +72,10 @@ def our_play_remote_game(server_url, game_id, auth, player: Player):
     return winner_color, win_reason, game_history
 
 
-def accept_invitation_and_play(server_url, auth, invitation_id):
+def accept_invitation_and_play(server_url, auth, invitation_id, finished):
+    # make sure this process doesn't react to the first interrupt signal
+    signal.signal(signal.SIGINT, ignore_one_term)
+
     player = get_player_from_config()
     logger = create_sub_logger('invitations')
 
@@ -87,50 +93,70 @@ def accept_invitation_and_play(server_url, auth, invitation_id):
         server.error_resign(game_id)
         player.handle_game_end(None, None, None)
         logger.critical('Game %d closed on account of error.', game_id)
+    finally:
+        server.finish_invitation(invitation_id)
+        finished.value = True
+        logger.debug('Game %d ended. Invitation %d closed.', game_id, invitation_id)
 
-    server.finish_invitation(invitation_id)
-    logger.debug('Game %d ended. Invitation %d closed.', game_id, invitation_id)
 
+def listen_for_invitations(server, max_concurrent_games):
 
-def listen_for_invitations(server_url, auth, max_concurrent_games):
-    server = RBCServer(server_url, auth)
-
-    create_main_logger(log_to_file=True)
     logger = create_sub_logger('server_manager')
 
     connected = False
-    queued_invitations = set()
-    current_games = []
-
+    process_by_invitation = {}
+    finished_by_invitation = {}
     while True:
         try:
+            # get unaccepted invitations
             invitations = server.get_invitations()
 
+            # set max games on server if this is the first successful connection after being disconnected
             if not connected:
                 logger.info('Connected successfully to server!')
                 connected = True
                 server.set_max_games(max_concurrent_games)
 
-            unqueued_invitations = set(invitations) - queued_invitations
-            for invitation_id in unqueued_invitations:
-                if len(current_games) < max_concurrent_games:
-                    logger.debug(f'Received invitation {invitation_id}.')
-                    queued_invitations.add(invitation_id)
-                    current_games.append(multiprocessing.Process(
-                        target=accept_invitation_and_play,
-                        args=(server_url, auth, invitation_id)
-                        ))
-                    current_games[-1].start()
+            # filter out finished processes
+            finished_invitations = []
+            for invitation in process_by_invitation.keys():
+                if not process_by_invitation[invitation].is_alive() or finished_by_invitation[invitation].value:
+                    finished_invitations.append(invitation)
+            for invitation in finished_invitations:
+                logger.info(f'Terminating process for invitation {invitation}')
+                process_by_invitation[invitation].terminate()
+                del process_by_invitation[invitation]
+                del finished_by_invitation[invitation]
 
-            for game in current_games:
-                if not game.is_alive():
-                    current_games.remove(game)
+            # accept invitations until we have #max_concurrent_games processes alive
+            for invitation in invitations:
+                # only accept the invitation if we have room and the invite doesn't have a process already
+                if invitation not in process_by_invitation:
+                    logger.debug(f'Received invitation {invitation}.')
+
+                    if len(process_by_invitation) < max_concurrent_games:
+                        # start the process for playing a game
+                        finished = multiprocessing.Value('b', False)
+                        process = multiprocessing.Process(
+                            target=accept_invitation_and_play,
+                            args=(server.server_url, server.session.auth, invitation, finished))
+                        process.start()
+
+                        # store the process so we can check when it finishes
+                        process_by_invitation[invitation] = process
+                        finished_by_invitation[invitation] = finished
+                    else:
+                        logger.info(f'Not enough game slots to play invitation {invitation}.')
+                        unranked_mode(server)
+                        max_concurrent_games += 1
 
         except requests.RequestException as e:
             connected = False
             logger.exception('Failed to connect to server')
+            print(e)
         except Exception:
             logger.exception("Error in invitation processing: ")
+            traceback.print_exc()
 
         time.sleep(5)
 
@@ -191,9 +217,35 @@ def player_configuration(config):
 @click.argument('username')
 @click.argument('password')
 @click.option('--server-url', 'server_url', default='https://rbc.jhuapl.edu', help='URL of the server.')
-@click.option('--max-concurrent-games', 'max_concurrent_games', type=int, default=4, help='Maximum games to play at once.')
-def main(username, password, server_url, max_concurrent_games):
-    listen_for_invitations(server_url, (username, password), max_concurrent_games)
+@click.option('--max-concurrent-games', 'max_concurrent_games', type=int, default=1, help='Maximum games to play at once.')
+@click.option('--ranked', 'ranked', type=bool, default=False, help='Play for leaderboard ELO.')
+@click.option('--keep-version', 'keep_version', type=bool, default=True, help='Keep existing leaderboard version num.')
+def main(username, password, server_url, max_concurrent_games, ranked, keep_version):
+    create_main_logger(log_to_file=True)
+    logger = create_sub_logger('modified_rc_connect')
+
+    auth = username, password
+    server = RBCServer(server_url, auth)
+
+    # verify we have the correct version of reconchess package
+    check_package_version(server)
+
+    def handle_term(signum, frame):
+        # reset to default response to interrupt signals
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        logger.warning('Received terminate signal, waiting for games to finish and then exiting.')
+        unranked_mode(server)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_term)
+
+    # tell the server whether we want to do ranked matches or not
+    if ranked:
+        ranked_mode(server, keep_version)
+    else:
+        unranked_mode(server)
+
+    listen_for_invitations(server, max_concurrent_games)
 
 
 if __name__ == '__main__':
