@@ -2,6 +2,7 @@ from functools import partial
 from typing import Iterable, Optional, Set
 from collections import defaultdict
 from tqdm import tqdm
+import signal
 
 import chess
 
@@ -152,3 +153,9 @@ def get_next_boards_and_capture_squares(my_color, board_epd):
 # Change any promotion moves to choose queen
 def force_promotion_to_queen(move: chess.Move):
     return move if len(move.uci()) == 4 else chess.Move.from_uci(move.uci()[:4] + 'q')
+
+
+def ignore_one_term(signum, frame):  # Let a sub-process survive the first ctrl-c call for graceful game exiting
+    # reset to default response to interrupt signals
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
