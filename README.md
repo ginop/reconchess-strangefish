@@ -79,6 +79,7 @@ use `strangefish/utilities/modified_rc_connect.py`, implemented here with
 click command-line arguments.
 
 Ex: `python strangefish/utilities/modified_rc_connect.py [your username] [your password] --max-concurrent-games 1`
+Or: `python strangefish/utilities/modified_rc_connect.py [your username] [your password] --ranked True`
 
 ## Other notes
 
