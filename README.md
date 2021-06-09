@@ -5,6 +5,19 @@ It played in and won the NeurIPS 2019 RBC tournament!
 For more information about RBC and the tournament, see
 https://rbc.jhuapl.edu/ and https://rbc.jhuapl.edu/tournaments/26.
 
+Active development of successor bots is not public, although some 
+updates have been made here for compatability. Feel free to ask 
+questions or raise issues on this repo as needed.
+
+## Disclaimer
+
+An author of this code is an employee of the host institution, JHUAPL,
+but was not at the time of the competition. JHUAPL has promoted code
+availability for this and other RBC bots to assist new participants.
+However, The Johns Hopkins University Applied Physics Lab has not 
+endoresd this code.
+
+
 ## Overview
 
 StrangeFish is separated into two parts: the primary component
@@ -80,9 +93,3 @@ click command-line arguments.
 
 Ex: `python strangefish/utilities/modified_rc_connect.py [your username] [your password] --max-concurrent-games 1`
 Or: `python strangefish/utilities/modified_rc_connect.py [your username] [your password] --ranked True`
-
-## Other notes
-
-Yes, this NeurIPS competitor is lacking any neural systems. Neural sub-systems were attempted
-over the pre-tournament development, but none out-performed the bot as it is here. Hopefully,
-then, StrangeFish can provide a useful competitor against which neural alternatives can be developed.
