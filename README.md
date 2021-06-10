@@ -11,12 +11,11 @@ questions or raise issues on this repo as needed.
 
 ## Disclaimer
 
-An author of this code is an employee of the host institution, JHUAPL,
-but was not at the time of the competition. JHUAPL has promoted code
-availability for this and other RBC bots to assist new participants.
-However, The Johns Hopkins University Applied Physics Lab has not 
-endoresd this code.
-
+An author of this code is an employee of the RBC-competition host
+institution, The Johns Hopkins University Applied Physics Laboratory
+(JHU/APL), but was not at the time of the competition. JHU/APL has
+promoted code availability for this and other RBC bots to assist new
+participants.  JHU/APL has not endorsed this code.
 
 ## Overview
 
