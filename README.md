@@ -6,7 +6,7 @@ For more information about RBC and the tournament, see
 https://rbc.jhuapl.edu/ and https://rbc.jhuapl.edu/tournaments/26.
 
 Active development of successor bots is not public, although some 
-updates have been made here for compatability. Feel free to ask 
+updates have been made here for compatibility. Feel free to ask 
 questions or raise issues on this repo as needed.
 
 ## Disclaimer
