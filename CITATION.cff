@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Perrotta"
+  given-names: "Gino"
+  orcid: "https://orcid.org/0000-0001-7440-4612"
+- family-names: "Perrotta"
+  given-names: "Robert"
+title: "StrangeFish"
+date-released: 2019-10-29
+url: "https://github.com/ginop/reconchess-strangefish"
